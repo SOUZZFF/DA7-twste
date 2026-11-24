@@ -1,287 +1,347 @@
 --[[
-    omk driver | Versão Completa
-    Compatível com PC e Mobile
+    VENOM HAVEN
+    Brookhaven RP Hub
+    Criado do zero - Novembro 2026
 ]]
 
--- ==================== ANTI AFK ====================
-warn("Anti afk running")
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
-    warn("Anti afk ran")
-    game:GetService("VirtualUser"):CaptureController()
-    game:GetService("VirtualUser"):ClickButton2(Vector2.new())
-end)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
--- ==================== MENU ====================
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+-- Estado
+local States = {
+    ESP = false,
+    Fly = false,
+    Speed = false,
+    Noclip = false,
+    InfJump = false,
+    AntiFling = false,
+    Fullbright = false
+}
 
-local Window = OrionLib:MakeWindow({
-    Name = "omk driver",
-    HidePremium = true,
-    SaveConfig = false,
-    IntroEnabled = false
-})
+local FlySpeed = 50
+local WalkSpeed = 50
+local ESPObjects = {}
+local Connections = {}
 
-local MainTab = Window:MakeTab({
-    Name = "Main",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-- Limpar
+local function ClearESP()
+    for _, v in pairs(ESPObjects) do
+        if v and v.Parent then v:Destroy() end
+    end
+    ESPObjects = {}
+end
 
--- ==================== SPEED ====================
-getfenv().speed = 500
-getfenv().boostMultiplier = 1
+-- ESP
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    local character = player.Character
+    if not character then return end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not root or not humanoid then return end
 
-MainTab:AddTextbox({
-    Name = "Enter Vehicle Speed",
-    Default = "500",
-    TextDisappear = false,
-    Callback = function(Value)
-        local num = tonumber(Value)
-        if num then
-            getfenv().speed = num
-            warn("Speed setada para: " .. num)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "VenomESP"
+    billboard.Adornee = root
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = character
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name
+    nameLabel.TextColor3 = Color3.fromRGB(180, 100, 255)
+    nameLabel.TextStrokeTransparency = 0.5
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.Parent = billboard
+
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    distLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+    distLabel.TextStrokeTransparency = 0.6
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextSize = 12
+    distLabel.Parent = billboard
+
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "VenomBox"
+    box.Adornee = root
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Size = character:GetExtentsSize()
+    box.Transparency = 0.6
+    box.Color3 = Color3.fromRGB(160, 80, 255)
+    box.Parent = character
+
+    table.insert(ESPObjects, billboard)
+    table.insert(ESPObjects, box)
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if not States.ESP or not character.Parent or not root.Parent then
+            if conn then conn:Disconnect() end
+            return
         end
-    end
-})
+        local dist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and (LocalPlayer.Character.HumanoidRootPart.Position - root.Position).Magnitude) or 0
+        distLabel.Text = math.floor(dist) .. "m | HP: " .. math.floor(humanoid.Health)
+        box.Size = character:GetExtentsSize()
+    end)
+    table.insert(Connections, conn)
+end
 
--- ==================== SPEED BOOST EXTRA ====================
-MainTab:AddToggle({
-    Name = "Speed Boost Extra",
-    Default = false,
-    Callback = function(state)
-        getfenv().speedBoost = state
-        getfenv().boostMultiplier = state and 2.2 or 1
-        warn(state and "Speed Boost Extra ATIVADO" or "Speed Boost Extra DESATIVADO")
-    end
-})
-
--- ==================== INFINITE NITRO ====================
-MainTab:AddToggle({
-    Name = "Infinite Nitro",
-    Default = false,
-    Callback = function(state)
-        getfenv().infNitro = state
-        warn(state and "Infinite Nitro ATIVADO" or "Infinite Nitro DESATIVADO")
-    end
-})
-
-task.spawn(function()
-    local teclas = {"LeftShift", "LeftControl", "E", "Q", "F"}
-    while true do
-        task.wait(0.12)
-        if getfenv().infNitro then
-            for _, tecla in pairs(teclas) do
-                pcall(function()
-                    game:GetService("VirtualInputManager"):SendKeyEvent(true, tecla, false, game)
-                end)
-            end
+local function ToggleESP(state)
+    States.ESP = state
+    ClearESP()
+    if state then
+        for _, plr in pairs(Players:GetPlayers()) do
+            CreateESP(plr)
         end
-    end
-end)
-
--- ==================== AUTO DRIVE ====================
-MainTab:AddToggle({
-    Name = "Auto Drive",
-    Default = false,
-    Callback = function(state)
-        getfenv().auto = state
-        if state then
-            local car = game.Players.LocalPlayer.ReplicationFocus
-            if car then
-                pcall(function()
-                    game.Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(-3531.84521, 36.217411, 1262.63647))
-                    task.wait()
-                    car:PivotTo(CFrame.new(-3531.84521, 36.217411, 1262.63647, -0.929316938, -7.24218182e-07, 0.36928311, 8.97509338e-08, 1, 2.18700848e-06, -0.36928311, 2.06556751e-06, -0.929316938))
-                    task.wait(1)
-                    getfenv().btp = car.CFrame
-                end)
-            end
-        end
-
-        while getfenv().auto do
-            local car = game.Players.LocalPlayer.ReplicationFocus
-            if car and getfenv().btp then
-                pcall(function()
-                    game:GetService("VirtualInputManager"):SendKeyEvent(true, "W", false, game)
-                    local speed = (getfenv().speed or 500) * (getfenv().boostMultiplier or 1)
-                    car:PivotTo(getfenv().btp)
-                    local dist = (car.Position - CFrame.new(-4049.48584, car.Position.Y, 1018.12622, -0.903568566, 3.80430015e-06, 0.428443521, 2.83321583e-06, 1, -2.90422236e-06, -0.428443521, -1.41029113e-06, -0.903568566).Position).Magnitude
-                    local TweenService = game:GetService("TweenService")
-                    local TweenInfoToUse = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
-                    local TweenValue = Instance.new("CFrameValue")
-                    TweenValue.Value = car.CFrame
-                    TweenValue.Changed:Connect(function()
-                        car:PivotTo(TweenValue.Value)
-                    end)
-                    local OnTween = TweenService:Create(TweenValue, TweenInfoToUse, {
-                        Value = CFrame.new(-4049.48584, car.Position.Y, 1018.12622, -0.903568566, 3.80430015e-06, 0.428443521, 2.83321583e-06, 1, -2.90422236e-06, -0.428443521, -1.41029113e-06, -0.903568566)
-                    })
-                    OnTween:Play()
-                    OnTween.Completed:Wait()
-                    game:GetService("VirtualInputManager"):SendKeyEvent(false, "W", false, game)
-                end)
-            end
-            task.wait()
-        end
-    end
-})
-
--- ==================== AUTO FARM RACE ====================
-getfenv().raceName = "Bridge_Trail"
-
-MainTab:AddTextbox({
-    Name = "Nome da Race",
-    Default = "Bridge_Trail",
-    TextDisappear = false,
-    Callback = function(Value)
-        getfenv().raceName = Value
-        warn("Race setada para: " .. Value)
-    end
-})
-
-MainTab:AddToggle({
-    Name = "Auto Farm Race",
-    Default = false,
-    Callback = function(state)
-        getfenv().autorace = state
-        local plr = game.Players.LocalPlayer
-        local success, CarSerivce = pcall(function()
-            return require(plr.PlayerScripts.TS.CarService.CarService_Client).CarSerivce
-        end)
-        if not success or not CarSerivce then return end
-        local CarInfo = CarSerivce.ActiveCar
-        if not CarInfo then return end
-
-        local maxSpeed = 300 * (getfenv().boostMultiplier or 1)
-
-        while getfenv().autorace do
-            task.wait()
-            if not workspace:FindFirstChild("RaceCheckpoints") then continue end
-
-            if not workspace.RaceCheckpoints:FindFirstChildOfClass("Model") then
-                pcall(function()
-                    game:GetService("ReplicatedStorage")["events-shared/Definations/Networking/RaceDefinations@GeneralEvents"].EnterRaceQueue:FireServer(getfenv().raceName or "Bridge_Trail", true)
-                end)
+        table.insert(Connections, Players.PlayerAdded:Connect(function(plr)
+            plr.CharacterAdded:Connect(function()
                 task.wait(1)
-            else
-                for _, v in pairs(workspace.RaceCheckpoints:GetChildren()) do
-                    if v:IsA("Model") and v:FindFirstChild("Ring") and v.Ring.Transparency < 1 then
-                        pcall(function()
-                            local dist = (CarInfo.Body.Position - v.WorldPivot.Position).Magnitude
-                            local TweenService = game:GetService("TweenService")
-                            local TweenInfoToUse = TweenInfo.new(dist / maxSpeed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
-                            local TweenValue = Instance.new("CFrameValue")
-                            TweenValue.Value = CarInfo.Body.CFrame
-                            TweenValue.Changed:Connect(function()
-                                CarInfo.Body.CFrame = TweenValue.Value
-                                CarInfo.Body.AssemblyLinearVelocity = Vector3.zero
-                            end)
-                            local tween = TweenService:Create(TweenValue, TweenInfoToUse, {Value = v.WorldPivot})
-                            tween:Play()
-                            tween.Completed:Wait()
-                        end)
+                if States.ESP then CreateESP(plr) end
+            end)
+        end))
+    end
+end
+
+-- Fly
+local BodyGyro, BodyVelocity
+local function ToggleFly(state)
+    States.Fly = state
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not root or not humanoid then return end
+
+    if state then
+        humanoid.PlatformStand = true
+        BodyGyro = Instance.new("BodyGyro")
+        BodyGyro.P = 9e4
+        BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        BodyGyro.CFrame = root.CFrame
+        BodyGyro.Parent = root
+
+        BodyVelocity = Instance.new("BodyVelocity")
+        BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        BodyVelocity.Parent = root
+
+        table.insert(Connections, RunService.RenderStepped:Connect(function()
+            if not States.Fly then return end
+            local camCF = Camera.CFrame
+            local direction = Vector3.new()
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + camCF.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - camCF.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - camCF.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + camCF.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.new(0, 1, 0) end
+            BodyVelocity.Velocity = direction.Unit * FlySpeed
+            if direction.Magnitude < 0.1 then BodyVelocity.Velocity = Vector3.new(0, 0, 0) end
+            BodyGyro.CFrame = camCF
+        end))
+    else
+        if BodyGyro then BodyGyro:Destroy() end
+        if BodyVelocity then BodyVelocity:Destroy() end
+        humanoid.PlatformStand = false
+    end
+end
+
+-- Speed
+local function ToggleSpeed(state)
+    States.Speed = state
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = state and WalkSpeed or 16
+    end
+end
+
+-- Noclip
+local function ToggleNoclip(state)
+    States.Noclip = state
+    if state then
+        table.insert(Connections, RunService.Stepped:Connect(function()
+            if not States.Noclip then return end
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
                     end
                 end
             end
-        end
+        end))
     end
-})
-
--- ==================== BOTÃO FLY MOBILE ====================
-local function criarBotaoMobile()
-    local PlayerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    if PlayerGui:FindFirstChild("OmkFlyButton") then
-        PlayerGui.OmkFlyButton:Destroy()
-    end
-
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "OmkFlyButton"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.Parent = PlayerGui
-
-    local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(0, 75, 0, 75)
-    Button.Position = UDim2.new(0.82, 0, 0.42, 0)
-    Button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.Text = "FLY\nOFF"
-    Button.TextScaled = true
-    Button.Font = Enum.Font.GothamBold
-    Button.Parent = ScreenGui
-
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(1, 0)
-    UICorner.Parent = Button
-
-    local UIStroke = Instance.new("UIStroke")
-    UIStroke.Color = Color3.fromRGB(255, 60, 60)
-    UIStroke.Thickness = 2.5
-    UIStroke.Parent = Button
-
-    local dragging, dragStart, startPos
-    Button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = Button.Position
-        end
-    end)
-    Button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    Button.MouseButton1Click:Connect(function()
-        getfenv().flyVehicle = not getfenv().flyVehicle
-        if getfenv().flyVehicle then
-            Button.Text = "FLY\nON"
-            Button.BackgroundColor3 = Color3.fromRGB(0, 160, 0)
-            UIStroke.Color = Color3.fromRGB(0, 255, 120)
-        else
-            Button.Text = "FLY\nOFF"
-            Button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-            UIStroke.Color = Color3.fromRGB(255, 60, 60)
-        end
-    end)
 end
 
-criarBotaoMobile()
-
--- ==================== FLY VEHICLE ====================
-MainTab:AddToggle({
-    Name = "Fly Vehicle (Mouse/Mobile)",
-    Default = false,
-    Callback = function(state)
-        getfenv().flyVehicle = state
-        warn(state and "Fly ATIVADO" or "Fly DESATIVADO")
-    end
-})
-
-task.spawn(function()
-    while true do
-        task.wait(0.02)
-        if getfenv().flyVehicle then
-            local car = game.Players.LocalPlayer.ReplicationFocus
-            local cam = workspace.CurrentCamera
-            if car and cam then
-                pcall(function()
-                    local speed = (getfenv().speed or 160) * (getfenv().boostMultiplier or 1)
-                    local look = cam.CFrame.LookVector
-                    local newPos = car.Position + (look * (speed * 0.155)) + Vector3.new(0, 3.4, 0)
-                    car:PivotTo(CFrame.new(newPos, newPos + look))
-                    car.AssemblyLinearVelocity = look * speed + Vector3.new(0, 50, 0)
-                    car.AssemblyAngularVelocity = Vector3.zero
-                end)
-            end
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+    if States.InfJump and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         end
     end
 end)
 
-OrionLib:Init()
+-- Fullbright
+local function ToggleFullbright(state)
+    States.Fullbright = state
+    if state then
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.GlobalShadows = false
+        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    else
+        Lighting.Brightness = 1
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 1000
+        Lighting.GlobalShadows = true
+    end
+end
+
+-- UI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "VenomHaven"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 320, 0, 420)
+Main.Position = UDim2.new(0.5, -160, 0.5, -210)
+Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+Main.Active = true
+Main.Draggable = true
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = Main
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(140, 70, 255)
+Stroke.Thickness = 1.5
+Stroke.Transparency = 0.3
+Stroke.Parent = Main
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundTransparency = 1
+Title.Text = "VENOM HAVEN"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 20
+Title.TextColor3 = Color3.fromRGB(180, 120, 255)
+Title.Parent = Main
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1, 0, 0, 20)
+Sub.Position = UDim2.new(0, 0, 0, 32)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Brookhaven • Criado do zero"
+Sub.Font = Enum.Font.Gotham
+Sub.TextSize = 11
+Sub.TextColor3 = Color3.fromRGB(140, 140, 160)
+Sub.Parent = Main
+
+local function CreateToggle(name, y, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -30, 0, 36)
+    frame.Position = UDim2.new(0, 15, 0, y)
+    frame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    frame.Parent = Main
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(220, 220, 240)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0, 44, 0, 22)
+    toggle.Position = UDim2.new(1, -56, 0.5, -11)
+    toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    toggle.Text = ""
+    toggle.Parent = frame
+
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(1, 0)
+    tCorner.Parent = toggle
+
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0, 16, 0, 16)
+    circle.Position = UDim2.new(0, 3, 0.5, -8)
+    circle.BackgroundColor3 = Color3.fromRGB(180, 180, 200)
+    circle.Parent = toggle
+
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(1, 0)
+    cCorner.Parent = circle
+
+    local on = false
+    toggle.MouseButton1Click:Connect(function()
+        on = not on
+        local goalPos = on and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+        local goalColor = on and Color3.fromRGB(140, 70, 255) or Color3.fromRGB(50, 50, 60)
+        local circleColor = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
+        TweenService:Create(circle, TweenInfo.new(0.2), {Position = goalPos, BackgroundColor3 = circleColor}):Play()
+        TweenService:Create(toggle, TweenInfo.new(0.2), {BackgroundColor3 = goalColor}):Play()
+        callback(on)
+    end)
+end
+
+CreateToggle("ESP", 70, ToggleESP)
+CreateToggle("Fly", 112, ToggleFly)
+CreateToggle("Speed", 154, ToggleSpeed)
+CreateToggle("Noclip", 196, ToggleNoclip)
+CreateToggle("Infinite Jump", 238, function(s) States.InfJump = s end)
+CreateToggle("Anti Fling", 280, function(s) States.AntiFling = s end)
+CreateToggle("Fullbright", 322, ToggleFullbright)
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.new(0, 28, 0, 28)
+Close.Position = UDim2.new(1, -36, 0, 8)
+Close.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+Close.Text = "×"
+Close.Font = Enum.Font.GothamBold
+Close.TextSize = 18
+Close.TextColor3 = Color3.fromRGB(200, 200, 220)
+Close.Parent = Main
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = Close
+
+Close.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    for _, c in pairs(Connections) do pcall(function() c:Disconnect() end) end
+    ClearESP()
+    ToggleFly(false)
+end)
+
+print("VENOM HAVEN carregado • Brookhaven")
